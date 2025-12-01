@@ -1,9 +1,8 @@
-# main.py — Full Final Ready-to-Use Version + Anti-Spam
+# main.py — Final Ready-to-Use Version
 import logging
 import math
 import requests
 import random
-import time
 from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, ContextTypes, filters
 import db
@@ -19,18 +18,6 @@ db.init_db()
 # ---------------- constants ----------------
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
 NOMINATIM_HEADERS = {"User-Agent": "AnonChatBot/1.0 (contact: ujangkasbon97@gmail.com)"}
-CHAT_RATE_LIMIT = 2  # detik per pesan
-
-# ---------------- anti-spam ----------------
-last_msg_time = {}  # user_id -> timestamp
-
-def can_send(user_id):
-    now = time.time()
-    last = last_msg_time.get(user_id, 0)
-    if now - last < CHAT_RATE_LIMIT:
-        return False
-    last_msg_time[user_id] = now
-    return True
 
 # ---------------- helpers ----------------
 def haversine_km(lat1, lon1, lat2, lon2):
@@ -209,9 +196,6 @@ async def handle_game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
     game = active_games.get(game_id)
     if not game or game["type"] != "quiz":
         return
-    if not can_send(user_id):
-        await update.message.reply_text("⚠️ Jangan spam, tunggu beberapa detik sebelum kirim jawaban lagi.")
-        return
     q_idx = game["current_q"]
     question = game["questions"][q_idx]
     correct_answer = question["answer"].lower()
@@ -219,10 +203,8 @@ async def handle_game_answer(update: Update, context: ContextTypes.DEFAULT_TYPE)
         game["score"][user_id] += 1
         await context.bot.send_message(user_id, f"✅ Jawaban benar! Skor kamu: {game['score'][user_id]}")
         await context.bot.send_message(partner_id, f"😎 Partnermu baru aja jawab benar!")
-    else:
-        await context.bot.send_message(user_id, f"❌ Jawaban salah!")
-    game["current_q"] +=1
-    await send_next_question(game_id, context)
+        game["current_q"] +=1
+        await send_next_question(game_id, context)
 
 # ---------------- registration & chat ----------------
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -234,10 +216,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def text_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = (update.message.text or "").strip()
     user_id = update.message.from_user.id
-    if not can_send(user_id):
-        await update.message.reply_text("⚠️ Jangan spam, tunggu beberapa detik sebelum kirim pesan lagi.")
-        return
-
     partner = get_partner(user_id)
     if partner:
         await handle_game_answer(update, context)
@@ -368,16 +346,13 @@ async def cmd_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
     remove_from_queue(user_id)
     if other: remove_from_queue(other)
 
-# ---------------- main ----------------
-def main():
-    app=ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start",cmd_start))
-    app.add_handler(CommandHandler("find",cmd_find))
-    app.add_handler(CommandHandler("stop",cmd_stop))
-    app.add_handler(MessageHandler(filters.LOCATION,location_handler))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND,text_handler))
-    logger.info("Bot started — final ready-to-use version with anti-spam.")
+# ---------------- RUN ----------------
+if __name__ == "__main__":
+    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app.add_handler(CommandHandler("start", cmd_start))
+    app.add_handler(CommandHandler("find", cmd_find))
+    app.add_handler(CommandHandler("stop", cmd_stop))
+    app.add_handler(MessageHandler(filters.LOCATION, location_handler))
+    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), text_handler))
+    print("Bot started...")
     app.run_polling()
-
-if __name__=="__main__":
-    main()
